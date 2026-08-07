@@ -52,6 +52,10 @@ TARGETS = {
     ),
     # Add more here. The poster mentioned a Google Canada link; drop it in as
     # "swe-early-career-campus-ca": "<url>" and everything else just works.
+    "CANARY-TEST-REMOVE-ME": (
+        "https://www.google.com/about/careers/applications/jobs/results/"
+        "114905638462464710-senior-software-engineer-vertex-ai-workbench"
+    ),
 }
 
 # A page that is known to have an open apply button. Used by --selftest so we can
