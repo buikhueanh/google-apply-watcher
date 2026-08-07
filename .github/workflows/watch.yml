@@ -1,0 +1,57 @@
+# .github/workflows/watch.yml
+#
+# Runs the watcher on GitHub's servers so it keeps working with your laptop shut.
+#
+# Cadence: one check every 5 minutes, which is GitHub's minimum cron granularity.
+# An earlier draft looped internally for 4.5 min per run to reach 60s resolution.
+# Dropped it: that is ~24h of compute per day, and the extra precision buys nothing
+# for an application window that stays open for days once it opens. Latency budget
+# should be set by how fast you need to ACT, not by how fast you CAN poll.
+name: apply-button-watcher
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: # manual "Run workflow" button, for testing
+
+# Scheduled runs can overlap when GitHub is backed up. Two concurrent runs would
+# race on the state cache and could double-notify.
+concurrency:
+  group: watcher
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # state.json carries the "already notified" flag between runs. Without it,
+      # every run after the button appears re-notifies: 288 messages a day.
+      - uses: actions/cache@v4
+        with:
+          path: state.json
+          key: watcher-state-${{ github.run_id }}
+          restore-keys: watcher-state-
+
+      # Runs on every invocation, not just once, because the failure this catches
+      # (Google changes their markup) can happen at any time. `|| true` because a
+      # transient network blip during selftest must not stop the real check below.
+      - name: Verify detector still matches Google's markup
+        run: python watcher.py --selftest || true
+
+      - name: Check the job pages
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+          DISCORD_USER_ID: ${{ secrets.DISCORD_USER_ID }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          NOTIFY_EMAIL: ${{ secrets.NOTIFY_EMAIL }}
+        run: python watcher.py --once
